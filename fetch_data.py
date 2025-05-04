@@ -2,7 +2,7 @@ import pandas as pd
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
-from vnstock import Vnstock  # Make sure you have installed it
+from vnstock import Vnstock
 from vnstock import Listing
 import os
 
@@ -17,8 +17,6 @@ retry_limit = 3
 
 listing = Listing()
 symbols = listing.all_symbols()['symbol']
-# Example: all stocks you want to fetch
-# TODO: Replace with your full stock list if needed
 
 # Create output folder if not exists
 os.makedirs(output_folder, exist_ok=True)
