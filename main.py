@@ -3,30 +3,30 @@ import pandas as pd
 import numpy as np
 import strategies
 import os
-from concurrent.futures import ProcessPoolExecutor  # or ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
-DATA_DIR = "stock_data"
+DATA_DIR = "precalc_data"
 csv_files = [os.path.join(DATA_DIR, f) for f in os.listdir(DATA_DIR) if f.endswith(".csv")]
 
 def runStrategyFromCSV(file_path):
     df = pd.read_csv(file_path, index_col='time')
-    # df['time'] = pd.DatetimeIndex(df['time'])
-    # df.set_index('time', inplace = True)
-    strategies.strategyOne(df)
+    test_results = strategies.strategyOne(df)
     print(f"Done running strategy on {file_path}")
+    return test_results
 
 
 def main():
-    results = []
+    total_result = pd.Series()
+    # total_profit = pd.Series()
+    # total_breakeven = pd.Series()
+    # total_loss = pd.Series()
 
-    with ProcessPoolExecutor(max_workers=8) as executor:
+    with ProcessPoolExecutor() as executor:
         futures = [executor.submit(runStrategyFromCSV, file) for file in csv_files]
-        for future in futures:
-            results.append(future.result())
+        for future in as_completed(futures):
+            total_result = pd.concat([total_result, future.result()], ignore_index=True)
 
-    # Do something with results
-    # for r in results:
-    #     print(r)
+    total_result.to_csv("total_results.csv")
 
 if __name__ == "__main__":
     main()

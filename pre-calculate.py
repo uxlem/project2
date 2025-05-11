@@ -15,7 +15,7 @@ def preCalc(f):
     df['rsi'] = ta.RSI(df['close'])
 
     file_path = os.path.split(f)[1]
-    file_path = os.path.join('precalc', file_path)
+    file_path = os.path.join('precalc_data', file_path)
     df.to_csv(file_path, index=False)
     
 def main():
