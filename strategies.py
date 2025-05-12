@@ -26,7 +26,7 @@ def find_high_index(series, current_index, lookback=20):
 
 
 # simple strategy using CCI, MACD and RSI indices
-def strategyOne(df):
+def strategy_one(df):
     # CCI(14)
     cci = df['cci']
     # MACD(12, 26, 9)
@@ -107,10 +107,12 @@ def strategyOne(df):
     return pd.Series(PnL)
 
 
-def strat_two(df):
+def strategy_two(df):
     
-    initial_cash = 10000
+    # initial_cash = 10000
     PnL = []
+    stocks_bought = 0
+    total_buy_price = 0
 
     high, low = df.columns.get_loc('high'), df.columns.get_loc('low')
     cci, rsi, macdhist = df.columns.get_loc('cci'), df.columns.get_loc('rsi'), df.columns.get_loc('macdhist')
@@ -123,7 +125,7 @@ def strat_two(df):
 
     def bullish(col=rsi):
         # Phân kỳ tăng (bullish) - Xét đáy
-        if (df.iat[i, col] < df.iat[i-1, col] and df.iat[i, low] < df.iat[i-1, low] and mini(col) is not None):
+        if df.iat[i, col] < df.iat[i - 1, col] and df.iat[i, low] < df.iat[i - 1, low] and mini(col) is not None:
             if df.iat[i, col] > mini(col) and df.iat[i, low] < mini(low):
                 return True
             if df.iat[i, col] < mini(col) and df.iat[i, low] > mini(low):
@@ -132,19 +134,13 @@ def strat_two(df):
 
     def bearish(col=rsi):
         # Phân kỳ giảm (bullish) - Xét đỉnh
-        if (df.iat[i, col] > df.iat[i-1, col] and df.iat[i, high] > df.iat[i-1, high] and maxi(col) is not None):
-            if (df.iat[i, col] > maxi(col) and df.iat[i, high] < maxi(high)):
+        if df.iat[i, col] > df.iat[i - 1, col] and df.iat[i, high] > df.iat[i - 1, high] and maxi(col) is not None:
+            if df.iat[i, col] > maxi(col) and df.iat[i, high] < maxi(high):
                 return True
-            if (df.iat[i, col] < maxi(col) and df.iat[i, high] > maxi(high)):
+            if df.iat[i, col] < maxi(col) and df.iat[i, high] > maxi(high):
                 return True
 
         return False
-
-    def buy():
-        pass
-
-    def sell():
-        pass
     
     for i in range(36, len(df)):
         yesterday = {
@@ -184,18 +180,20 @@ def strat_two(df):
         buy_vote = sum(buy_signals.values())
         sell_vote = sum(sell_signals.values())
         
-        if (buy_vote > 0):
-            if (buy_vote >= sell_vote):
-                buy()
-            else:
-                sell()
-        elif (sell_vote > 0):
-            sell()
+        if buy_vote > 0:
+            stocks_bought += 1
+            total_buy_price += df['close'].iloc[i]
+        elif sell_vote > 0 and stocks_bought > 0:
+            sell_price = df['close'].iloc[i] * stocks_bought
+            PnL.append((sell_price - total_buy_price) * 100 / total_buy_price)
+            # print(f"Bán {stocks_bought} tổng giá {sell_price}")
+            total_buy_price = 0
+            stocks_bought = 0
 
         
-    return PnL
+    return pd.Series(PnL)
 
 df = pd.read_csv('precalc_data/AAA.csv', index_col='time')
-strat_two(df)
+strategy_two(df)
 
 
