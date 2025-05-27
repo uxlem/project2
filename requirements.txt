@@ -67,3 +67,5 @@ vnstock_ezchart==0.0.2
 wcwidth==0.2.13
 wordcloud==1.9.4
 zipp==3.21.0
+
+scipy~=1.15.3

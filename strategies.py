@@ -52,7 +52,7 @@ def strategy_one(df):
 
         prev_low_macd_idx = find_low_index(macd, i, 26)
         prev_high_macd_idx = find_high_index(macd, i, 26)
-
+ 
         # Bullish Divergence
         if (prev_low_idx is not None) and (prev_low_rsi_idx is not None) and (prev_low_macd_idx is not None):
             try:
