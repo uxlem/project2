@@ -7,16 +7,17 @@ from vnstock import Listing
 import os
 
 # Parameters
-start_date = '2018-01-01'
+start_date = '2006-01-01'
 end_date = '2025-01-01'
 max_workers = 5  # number of threads per batch (small because server is sensitive)
-batch_size = 5   # fetch 5 stocks at a time
+batch_size = 10   # fetch 5 stocks at a time
 delay_seconds = 10  # wait 10 seconds between batches
-output_folder = 'stock_data'
+output_folder = 'stock_data_VN30only'
 retry_limit = 3
 
 listing = Listing()
-symbols = listing.all_symbols()['symbol']
+# symbols = listing.all_symbols()['symbol']
+symbols = listing.symbols_by_group("VN30")
 
 # Create output folder if not exists
 os.makedirs(output_folder, exist_ok=True)
@@ -65,4 +66,4 @@ if __name__ == "__main__":
             print(f"Waiting {delay_seconds} seconds before next batch...")
             time.sleep(delay_seconds)
     
-    print(f"Finished fetching {len(all_data)} stocks. Saved to '{output_folder}/'")
+    print(f"Finished fetching {len(all_data)}/{total_symbols} stocks. Saved to '{output_folder}/'")

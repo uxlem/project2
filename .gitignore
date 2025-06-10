@@ -1,3 +1,8 @@
+#
+stock_data/
+stock_data_VN30only/
+precalc_data/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
