@@ -1,5 +1,5 @@
 import pandas as pd
-import strat_v4a as strats
+import strat_v4 as strats
 import os
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
