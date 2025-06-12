@@ -9,7 +9,7 @@ import os
 
 # os.makedirs("logs", exist_ok=True)
 logging.basicConfig(
-    filename="strat_v4.log",
+    filename="strat_v4vec.log",
     filemode='w',
     level=logging.INFO,  # Can also use DEBUG, WARNING, etc.
     format='%(asctime)s - %(levelname)s - %(message)s'
@@ -46,31 +46,30 @@ def stoch_crossover(df: pd.DataFrame, inplace: bool = True):
 
     # Xét tín hiệu thông thường - Crossovers
 
-    col_close = df.columns.get_loc("close")
-    col_slowk = df.columns.get_loc("slowk")
-    col_slowd = df.columns.get_loc("slowd")
+    slowk = df["slowk"].values
+    slowd = df["slowd"].values
+    close = df["close"].values
 
-    for i in range(26, len(df) - 2):
-        # Mua: %K cắt lên trên %D && %K và %D cùng từ dưới 20 (vùng quá bán) cắt lên
-        if (
-            20 >= df.iat[i, col_slowk] >= df.iat[i, col_slowd]
-            and df.iat[i - 1, col_slowk] <= df.iat[i - 1, col_slowd]
-            and (df.iat[i + 1, col_slowk] > 20 or df.iat[i + 2, col_slowk] > 20)
-            and (df.iat[i + 1, col_slowd] > 20 or df.iat[i + 2, col_slowd] > 20)
-        ):
-            df.iat[i + 1, df.columns.get_loc("stoch_crossover_buy_signals")] = df.iat[
-                i + 1, col_close
-            ]
-        # Bán: %K cắt xuống dưới %D && %K và %D cùng từ trên 80 (vùng quá mua) cắt xuống
-        if (
-            80 <= df.iat[i, col_slowk] <= df.iat[i, col_slowd]
-            and df.iat[i - 1, col_slowk] >= df.iat[i - 1, col_slowd]
-            and (df.iat[i + 1, col_slowk] < 80 or df.iat[i + 2, col_slowk] < 80)
-            and (df.iat[i + 1, col_slowd] < 80 or df.iat[i + 2, col_slowd] < 80)
-        ):
-            df.iat[i + 1, df.columns.get_loc("stoch_crossover_sell_signals")] = df.iat[
-                i + 1, col_close
-            ]
+    # Buy: %K crosses above %D, both from below 20, and both move above 20 in next 2 bars
+    cond_buy = (
+        (slowk[26:-2] >= slowd[26:-2]) & (slowk[26:-2] <= 20) & (slowd[26:-2] <= 20) &
+        (slowk[25:-3] <= slowd[25:-3]) &
+        ((slowk[27:-1] > 20) | (slowk[28:] > 20)) &
+        ((slowd[27:-1] > 20) | (slowd[28:] > 20))
+    )
+    buy_idx = np.where(cond_buy)[0] + 27  # +27 aligns with i+1 in your loop
+
+    # Sell: %K crosses below %D, both from above 80, and both move below 80 in next 2 bars
+    cond_sell = (
+        (slowk[26:-2] <= slowd[26:-2]) & (slowk[26:-2] >= 80) & (slowd[26:-2] >= 80) &
+        (slowk[25:-3] >= slowd[25:-3]) &
+        ((slowk[27:-1] < 80) | (slowk[28:] < 80)) &
+        ((slowd[27:-1] < 80) | (slowd[28:] < 80))
+    )
+    sell_idx = np.where(cond_sell)[0] + 27  # +27 aligns with i+1 in your loop
+
+    df.loc[df.index[buy_idx], "stoch_crossover_buy_signals"] = close[buy_idx]
+    df.loc[df.index[sell_idx], "stoch_crossover_sell_signals"] = close[sell_idx]
 
     if not inplace:
         return df
@@ -89,19 +88,14 @@ def rsi_crossover(df: pd.DataFrame, inplace: bool = True):
 
     # Xét tín hiệu thông thường - Crossovers
 
-    col_close = df.columns.get_loc("close")
-    col_rsi = df.columns.get_loc("rsi")
+    close = df["close"].values
+    rsi = df["rsi"].values
 
-    for i in range(26, len(df) - 2):
-        if df.iat[i, col_rsi] < 30 <= df.iat[i + 1, col_rsi]:
-            df.iat[i + 1, df.columns.get_loc("rsi_crossover_buy_signals")] = df.iat[
-                i + 1, col_close
-            ]
+    buy_idx = np.where((rsi[:-1] < 30) & (rsi[1:] >= 30))[0] + 1
+    df.loc[df.index[buy_idx], "rsi_crossover_buy_signals"] = close[buy_idx]
 
-        if df.iat[i, col_rsi] > 70 >= df.iat[i + 1, col_rsi]:
-            df.iat[i + 1, df.columns.get_loc("rsi_crossover_sell_signals")] = df.iat[
-                i + 1, col_close
-            ]
+    sell_idx = np.where((rsi[:-1] > 70) & (rsi[1:] <= 70))[0] + 1
+    df.loc[df.index[sell_idx], "rsi_crossover_sell_signals"] = close[sell_idx]
 
     if not inplace:
         return df
@@ -121,26 +115,20 @@ def macd_crossover(df: pd.DataFrame, inplace: bool = True):
 
     # Xét tín hiệu thông thường - Crossovers
 
-    col_close = df.columns.get_loc("close")
-    col_hist = df.columns.get_loc("macdhist")
-    col_rsi = df.columns.get_loc("rsi")
+    close = df["close"].values
+    hist = df["macdhist"].values
+    rsi = df["rsi"].values
 
-    for i in range(26, len(df) - 2):
-        if df.iat[i, col_hist] < 0 <= df.iat[i + 1, col_hist] and not (
-            45 < df.iat[i+1, col_rsi] < 55
-        ):
-            df.iat[i + 1, df.columns.get_loc("macd_crossover_buy_signals")] = df.iat[
-                i + 1, col_close
-            ]
-            # logging.info(f"mua {i+1}")
+    cond_rsi = ((rsi[1:] <= 45) | (rsi[1:] >= 55))
+    cond_buy = ((hist[:-1] < 0) & (hist[1:] >= 0) & cond_rsi)
+    buy_idx = np.where(cond_buy)[0] + 1
 
-        if df.iat[i, col_hist] > 0 >= df.iat[i + 1, col_hist] and not (
-            45 < df.iat[i+1, col_rsi] < 55
-        ):
-            df.iat[i + 1, df.columns.get_loc("macd_crossover_sell_signals")] = df.iat[
-                i + 1, col_close
-            ]
-            # logging.info(f"bán {i+1}")
+    cond_sell = ((hist[:-1] > 0) & (hist[1:] <= 0) & cond_rsi)
+    sell_idx = np.where(cond_sell)[0] + 1
+
+    df.loc[df.index[buy_idx], "macd_crossover_buy_signals"] = close[buy_idx]
+    df.loc[df.index[sell_idx], "macd_crossover_sell_signals"] = close[sell_idx]
+    
     if not inplace:
         return df
     return None
@@ -162,21 +150,15 @@ def cci_crossover(df: pd.DataFrame, inplace: bool = True):
 
     # Xét tín hiệu thông thường - Crossovers
 
-    col_close = df.columns.get_loc("close")
-    col_cci = df.columns.get_loc("cci")
+    close = df["close"].values
+    cci = df["cci"].values
 
-    for i in range(26, len(df) - 2):
-        if df.iat[i, col_cci] < -100 <= df.iat[i + 1, col_cci]:
-            df.iat[i + 1, df.columns.get_loc("cci_crossover_buy_signals")] = df.iat[
-                i + 1, col_close
-            ]
-            # logging.info(f"mua {i+1}")
+    buy_idx = np.where((cci[:-1] < -100) & (cci[1:] >= 100))[0]+1
+    df.loc[df.index[buy_idx], "cci_crossover_buy_signals"] = close[buy_idx]
 
-        if df.iat[i, col_cci] > 100 >= df.iat[i + 1, col_cci]:
-            df.iat[i + 1, df.columns.get_loc("cci_crossover_sell_signals")] = df.iat[
-                i + 1, col_close
-            ]
-            # logging.info(f"bán {i+1}")
+    sell_idx = np.where((cci[:-1] > 100) & (cci[1:] <= 100))[0]+1
+    df.loc[df.index[sell_idx], "cci_crossover_sell_signals"] = close[sell_idx]
+
     if not inplace:
         return df
     return None
@@ -232,33 +214,34 @@ def divergence_signals(
     df["i1"] = np.nan
     df["i2"] = np.nan
 
+    # Tạo các mảng NumPy để tính toán nhanh hơn (không nhiều)
+    low = df["low"].values
+    high = df["high"].values
+    close = df["close"].values
+    ind = df[indicator].values
+
+    buy_signal_indices = []
+    buy_signal_values = []
+    p1_list = []
+    p2_list = []
+    i1_list = []
+    i2_list = []
+
     # Tính cực tiểu
-    price_low_idxs = argrelextrema(df["low"].values, np.less, order=extrema_order)[0]
-    ind_low_idxs = argrelextrema(df[indicator].values, np.less, order=extrema_order)[0]
+    price_low_idxs = argrelextrema(low, np.less, order=extrema_order)[0]
+    ind_low_idxs = argrelextrema(ind, np.less, order=extrema_order)[0]
 
     # Tính cực đại
-    price_high_idxs = argrelextrema(df["high"].values, np.greater, order=extrema_order)[
-        0
-    ]
-    ind_high_idxs = argrelextrema(
-        df[indicator].values, np.greater, order=extrema_order
-    )[0]
+    price_high_idxs = argrelextrema(high, np.greater, order=extrema_order)[0]
+    ind_high_idxs = argrelextrema(ind, np.greater, order=extrema_order)[0]
 
     # Chép giá trị cực tiểu
-    df.iloc[price_low_idxs, df.columns.get_loc("price_low")] = df.iloc[
-        price_low_idxs, df.columns.get_loc("low")
-    ].values
-    df.iloc[ind_low_idxs, df.columns.get_loc(f"{indicator}_low")] = df.iloc[
-        ind_low_idxs, df.columns.get_loc(indicator)
-    ].values
+    df.loc[df.index[price_low_idxs], "price_low"] = low[price_low_idxs]
+    df.loc[df.index[ind_low_idxs], f"{indicator}_low"] = ind[ind_low_idxs]
 
     # Chép giá trị cực đại
-    df.iloc[price_high_idxs, df.columns.get_loc("price_high")] = df.iloc[
-        price_high_idxs, df.columns.get_loc("high")
-    ].values
-    df.iloc[ind_high_idxs, df.columns.get_loc(f"{indicator}_high")] = df.iloc[
-        ind_high_idxs, df.columns.get_loc(indicator)
-    ].values
+    df.loc[df.index[price_high_idxs], "price_high"] = high[price_high_idxs]
+    df.loc[df.index[ind_high_idxs], f"{indicator}_high"] = ind[ind_high_idxs]
 
     # Xét từng đáy của chỉ số
     logging.info("Phân kỳ tăng - Bullish Divergence:")
@@ -271,9 +254,7 @@ def divergence_signals(
             if ip <= 0:
                 continue
             price2_idx = price_low_idxs[ip - 1]
-            ip = bisect.bisect_right(
-                price_low_idxs, previous_ind_low_idx + max_idx_dist
-            )
+            ip = bisect.bisect_right(price_low_idxs, previous_ind_low_idx + max_idx_dist)
             if ip <= 0:
                 continue
             price1_idx = price_low_idxs[ip - 1]
@@ -282,14 +263,10 @@ def divergence_signals(
                 and abs(current_ind_low_idx - price2_idx) <= max_idx_dist
                 and abs(previous_ind_low_idx - price1_idx) <= max_idx_dist
             ):
-                pre_mh = df.iat[
-                    previous_ind_low_idx, df.columns.get_loc(f"{indicator}_low")
-                ]
-                cur_mh = df.iat[
-                    current_ind_low_idx, df.columns.get_loc(f"{indicator}_low")
-                ]
-                price1 = df.iat[price1_idx, df.columns.get_loc("price_low")]
-                price2 = df.iat[price2_idx, df.columns.get_loc("price_low")]
+                pre_mh = ind[previous_ind_low_idx]
+                cur_mh = ind[current_ind_low_idx]
+                price1 = low[price1_idx]
+                price2 = low[price2_idx]
                 if (pre_mh - cur_mh) * (price1 - price2) < 0:
                     divergence_type = "regular" if pre_mh < cur_mh else "hidden"
                     logging.info(f"\tType: {divergence_type}")
@@ -300,25 +277,28 @@ def divergence_signals(
                         f"\t\t{indicator} lows:\t{pre_mh:.2f} at index {previous_ind_low_idx},\t{cur_mh:.2f} at index {current_ind_low_idx}"
                     )
                     if current_ind_low_idx + wait < len(df):
-                        df.iat[
-                            current_ind_low_idx + wait,
-                            df.columns.get_loc(f"{indicator}_divergence_buy_signals"),
-                        ] = df.iat[current_ind_low_idx + wait, df.columns.get_loc("close")]
+                        buy_signal_indices.append(current_ind_low_idx + wait)
+                        buy_signal_values.append(close[current_ind_low_idx + wait])
                         logging.info(
                             f"\t\tAdded buy signals at index {current_ind_low_idx + wait}"
                         )
-                        df.iat[current_ind_low_idx + wait, df.columns.get_loc("p1")] = (
-                            price1_idx
-                        )
-                        df.iat[current_ind_low_idx + wait, df.columns.get_loc("p2")] = (
-                            price2_idx
-                        )
-                        df.iat[current_ind_low_idx + wait, df.columns.get_loc("i1")] = (
-                            previous_ind_low_idx
-                        )
-                        df.iat[current_ind_low_idx + wait, df.columns.get_loc("i2")] = (
-                            current_ind_low_idx
-                        )
+                        p1_list.append(price1_idx)
+                        p2_list.append(price2_idx)
+                        i1_list.append(previous_ind_low_idx)
+                        i2_list.append(current_ind_low_idx)
+
+    df.loc[df.index[buy_signal_indices], f"{indicator}_divergence_buy_signals"] = buy_signal_values
+    df.loc[df.index[buy_signal_indices], "p1"] = df.index[p1_list].tolist()
+    df.loc[df.index[buy_signal_indices], "p2"] = df.index[p2_list].tolist()
+    df.loc[df.index[buy_signal_indices], "i1"] = df.index[i1_list].tolist()
+    df.loc[df.index[buy_signal_indices], "i2"] = df.index[i2_list].tolist()
+
+    sell_signal_indices = []
+    sell_signal_values = []
+    p1_list = []
+    p2_list = []
+    i1_list = []
+    i2_list = []
 
     # Xét từng đỉnh của chỉ số
     logging.info("Phân kỳ giảm - Bearish Divergence")
@@ -344,14 +324,10 @@ def divergence_signals(
                 and abs(current_ind_high_idx - price2_idx) <= max_idx_dist
                 and abs(previous_ind_high_idx - price1_idx) <= max_idx_dist
             ):
-                pre_mh = df.iat[
-                    previous_ind_high_idx, df.columns.get_loc(f"{indicator}_high")
-                ]
-                cur_mh = df.iat[
-                    current_ind_high_idx, df.columns.get_loc(f"{indicator}_high")
-                ]
-                price1 = df.iat[price1_idx, df.columns.get_loc("price_high")]
-                price2 = df.iat[price2_idx, df.columns.get_loc("price_high")]
+                pre_mh = ind[previous_ind_high_idx]
+                cur_mh = ind[current_ind_high_idx]
+                price1 = high[price1_idx]
+                price2 = high[price2_idx]
                 if (pre_mh - cur_mh) * (price1 - price2) < 0:
                     divergence_type = "regular" if pre_mh > cur_mh else "hidden"
                     logging.info(f"\tType: {divergence_type}")
@@ -363,27 +339,22 @@ def divergence_signals(
                     )
 
                     if current_ind_high_idx + wait < len(df):
-                        df.iat[
-                            current_ind_high_idx + wait,
-                            df.columns.get_loc(f"{indicator}_divergence_sell_signals"),
-                        ] = df.iat[current_ind_high_idx + wait, df.columns.get_loc("close")]
+                        sell_signal_indices.append(current_ind_high_idx + wait)
+                        sell_signal_values.append(close[current_ind_high_idx + wait])
                         logging.info(
                             f"\t\tAdded sell signals at index {current_ind_high_idx + wait}"
                         )
-                        df.iat[
-                            current_ind_high_idx + wait, df.columns.get_loc("i1")
-                        ] = previous_ind_high_idx
-                        df.iat[
-                            current_ind_high_idx + wait, df.columns.get_loc("p1")
-                        ] = price1_idx
-                        df.iat[
-                            current_ind_high_idx + wait, df.columns.get_loc("i2")
-                        ] = current_ind_high_idx
-                        df.iat[
-                            current_ind_high_idx + wait, df.columns.get_loc("p2")
-                        ] = price2_idx
+                        p1_list.append(price1_idx)
+                        p2_list.append(price2_idx)
+                        i1_list.append(previous_ind_high_idx)
+                        i2_list.append(current_ind_high_idx)
 
-    df.to_csv("divergence.csv")
+    df.loc[df.index[sell_signal_indices], f"{indicator}_divergence_sell_signals"] = sell_signal_values
+    df.loc[df.index[sell_signal_indices], "p1"] = df.index[p1_list].tolist()
+    df.loc[df.index[sell_signal_indices], "p2"] = df.index[p2_list].tolist()
+    df.loc[df.index[sell_signal_indices], "i1"] = df.index[i1_list].tolist()
+    df.loc[df.index[sell_signal_indices], "i2"] = df.index[i2_list].tolist()
+
     if not inplace:
         return df
     return None
@@ -464,7 +435,7 @@ def strategy(df: pd.DataFrame, filepath:str, signals: list[str] = ["rsi_crossove
             stocks_bought = 0
             df.loc[df.index[i], "sell_mark"] = df.loc[df.index[i], "close"]
     
-    # df.to_csv("strat_v4_df_mark.csv")
+    df.to_csv("strat_v4_vec.csv")
     return PnL
 
 

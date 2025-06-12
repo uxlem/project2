@@ -12,12 +12,12 @@ end_date = '2025-01-01'
 max_workers = 5  # number of threads per batch (small because server is sensitive)
 batch_size = 10   # fetch 5 stocks at a time
 delay_seconds = 10  # wait 10 seconds between batches
-output_folder = 'stock_data_VN30only'
+output_folder = 'stock_data_VN100'
 retry_limit = 3
 
 listing = Listing()
 # symbols = listing.all_symbols()['symbol']
-symbols = listing.symbols_by_group("VN30")
+symbols = listing.symbols_by_group("VN100")
 
 # Create output folder if not exists
 os.makedirs(output_folder, exist_ok=True)
