@@ -10,10 +10,17 @@ import os
 # os.makedirs("logs", exist_ok=True)
 logging.basicConfig(
     filename="strat_v4vec.log",
-    filemode='w',
+    filemode="w",
     level=logging.INFO,  # Can also use DEBUG, WARNING, etc.
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    format="%(asctime)s - %(levelname)s - %(message)s",
 )
+
+
+def load_and_filter_from_csv(filepath: str):
+    df = pd.read_csv(filepath, index_col="time", parse_dates=True)
+    df = df[(df["close"] > 0) & (df["volume"] > 0)].copy()
+    return df
+
 
 def stoch_crossover(df: pd.DataFrame, inplace: bool = True):
     """
@@ -52,19 +59,23 @@ def stoch_crossover(df: pd.DataFrame, inplace: bool = True):
 
     # Buy: %K crosses above %D, both from below 20, and both move above 20 in next 2 bars
     cond_buy = (
-        (slowk[26:-2] >= slowd[26:-2]) & (slowk[26:-2] <= 20) & (slowd[26:-2] <= 20) &
-        (slowk[25:-3] <= slowd[25:-3]) &
-        ((slowk[27:-1] > 20) | (slowk[28:] > 20)) &
-        ((slowd[27:-1] > 20) | (slowd[28:] > 20))
+        (slowk[26:-2] >= slowd[26:-2])
+        & (slowk[26:-2] <= 20)
+        & (slowd[26:-2] <= 20)
+        & (slowk[25:-3] <= slowd[25:-3])
+        & ((slowk[27:-1] > 20) | (slowk[28:] > 20))
+        & ((slowd[27:-1] > 20) | (slowd[28:] > 20))
     )
     buy_idx = np.where(cond_buy)[0] + 27  # +27 aligns with i+1 in your loop
 
     # Sell: %K crosses below %D, both from above 80, and both move below 80 in next 2 bars
     cond_sell = (
-        (slowk[26:-2] <= slowd[26:-2]) & (slowk[26:-2] >= 80) & (slowd[26:-2] >= 80) &
-        (slowk[25:-3] >= slowd[25:-3]) &
-        ((slowk[27:-1] < 80) | (slowk[28:] < 80)) &
-        ((slowd[27:-1] < 80) | (slowd[28:] < 80))
+        (slowk[26:-2] <= slowd[26:-2])
+        & (slowk[26:-2] >= 80)
+        & (slowd[26:-2] >= 80)
+        & (slowk[25:-3] >= slowd[25:-3])
+        & ((slowk[27:-1] < 80) | (slowk[28:] < 80))
+        & ((slowd[27:-1] < 80) | (slowd[28:] < 80))
     )
     sell_idx = np.where(cond_sell)[0] + 27  # +27 aligns with i+1 in your loop
 
@@ -107,7 +118,9 @@ def macd_crossover(df: pd.DataFrame, inplace: bool = True):
         df = df.copy()
 
     # Tính CCI(14)
-    df["macd"], df["macdsignal"], df["macdhist"] = ta.MACD(df["close"].to_numpy("float64"))
+    df["macd"], df["macdsignal"], df["macdhist"] = ta.MACD(
+        df["close"].to_numpy("float64")
+    )
     df["rsi"] = ta.RSI(df["close"].to_numpy("float64"))
     # Tạo cột
     df["macd_crossover_buy_signals"] = np.nan
@@ -119,16 +132,16 @@ def macd_crossover(df: pd.DataFrame, inplace: bool = True):
     hist = df["macdhist"].values
     rsi = df["rsi"].values
 
-    cond_rsi = ((rsi[1:] <= 45) | (rsi[1:] >= 55))
-    cond_buy = ((hist[:-1] < 0) & (hist[1:] >= 0) & cond_rsi)
+    cond_rsi = (rsi[1:] <= 45) | (rsi[1:] >= 55)
+    cond_buy = (hist[:-1] < 0) & (hist[1:] >= 0) & cond_rsi
     buy_idx = np.where(cond_buy)[0] + 1
 
-    cond_sell = ((hist[:-1] > 0) & (hist[1:] <= 0) & cond_rsi)
+    cond_sell = (hist[:-1] > 0) & (hist[1:] <= 0) & cond_rsi
     sell_idx = np.where(cond_sell)[0] + 1
 
     df.loc[df.index[buy_idx], "macd_crossover_buy_signals"] = close[buy_idx]
     df.loc[df.index[sell_idx], "macd_crossover_sell_signals"] = close[sell_idx]
-    
+
     if not inplace:
         return df
     return None
@@ -153,10 +166,10 @@ def cci_crossover(df: pd.DataFrame, inplace: bool = True):
     close = df["close"].values
     cci = df["cci"].values
 
-    buy_idx = np.where((cci[:-1] < -100) & (cci[1:] >= 100))[0]+1
+    buy_idx = np.where((cci[:-1] < -100) & (cci[1:] >= -100))[0] + 1
     df.loc[df.index[buy_idx], "cci_crossover_buy_signals"] = close[buy_idx]
 
-    sell_idx = np.where((cci[:-1] > 100) & (cci[1:] <= 100))[0]+1
+    sell_idx = np.where((cci[:-1] > 100) & (cci[1:] <= 100))[0] + 1
     df.loc[df.index[sell_idx], "cci_crossover_sell_signals"] = close[sell_idx]
 
     if not inplace:
@@ -178,7 +191,9 @@ def divergence_signals(
     logging.info("Tìm các điểm phân kỳ")
     if indicator == "macd":
         logging.info("Indicator: MACD(12, 26, 9)")
-        df[f"{indicator}"], _, _ = ta.MACD(df["close"].to_numpy(dtype="float64"))
+        df[f"{indicator}"], df["macdsignal"], df["macdhist"] = ta.MACD(
+            df["close"].to_numpy(dtype="float64")
+        )
     elif indicator == "cci":
         logging.info("Indicator: CCI(14)")
         df[f"{indicator}"] = ta.CCI(
@@ -191,7 +206,7 @@ def divergence_signals(
         df[f"{indicator}"] = ta.RSI(df["close"].to_numpy(dtype="float64"))
     elif indicator == "stoch":
         logging.info("Indicator: Stoch(14)")
-        df[f"{indicator}"], _ = ta.STOCH(
+        df[f"{indicator}"], df["slowd"] = ta.STOCH(
             df["high"].to_numpy(dtype="float64"),
             df["low"].to_numpy(dtype="float64"),
             df["close"].to_numpy(dtype="float64"),
@@ -209,10 +224,10 @@ def divergence_signals(
     df[f"{indicator}_high"] = np.nan
 
     # Lưu index của các cặp đáy/đỉnh của giá và chỉ số để vẽ đồ thị (mplfinance)
-    df["p1"] = np.nan
-    df["p2"] = np.nan
-    df["i1"] = np.nan
-    df["i2"] = np.nan
+    df["p1"] = pd.Series([pd.NaT] * len(df), index=df.index, dtype="datetime64[ns]")
+    df["p2"] = pd.Series([pd.NaT] * len(df), index=df.index, dtype="datetime64[ns]")
+    df["i1"] = pd.Series([pd.NaT] * len(df), index=df.index, dtype="datetime64[ns]")
+    df["i2"] = pd.Series([pd.NaT] * len(df), index=df.index, dtype="datetime64[ns]")
 
     # Tạo các mảng NumPy để tính toán nhanh hơn (không nhiều)
     low = df["low"].values
@@ -254,7 +269,9 @@ def divergence_signals(
             if ip <= 0:
                 continue
             price2_idx = price_low_idxs[ip - 1]
-            ip = bisect.bisect_right(price_low_idxs, previous_ind_low_idx + max_idx_dist)
+            ip = bisect.bisect_right(
+                price_low_idxs, previous_ind_low_idx + max_idx_dist
+            )
             if ip <= 0:
                 continue
             price1_idx = price_low_idxs[ip - 1]
@@ -287,7 +304,9 @@ def divergence_signals(
                         i1_list.append(previous_ind_low_idx)
                         i2_list.append(current_ind_low_idx)
 
-    df.loc[df.index[buy_signal_indices], f"{indicator}_divergence_buy_signals"] = buy_signal_values
+    df.loc[df.index[buy_signal_indices], f"{indicator}_divergence_buy_signals"] = (
+        buy_signal_values
+    )
     df.loc[df.index[buy_signal_indices], "p1"] = df.index[p1_list].tolist()
     df.loc[df.index[buy_signal_indices], "p2"] = df.index[p2_list].tolist()
     df.loc[df.index[buy_signal_indices], "i1"] = df.index[i1_list].tolist()
@@ -349,7 +368,9 @@ def divergence_signals(
                         i1_list.append(previous_ind_high_idx)
                         i2_list.append(current_ind_high_idx)
 
-    df.loc[df.index[sell_signal_indices], f"{indicator}_divergence_sell_signals"] = sell_signal_values
+    df.loc[df.index[sell_signal_indices], f"{indicator}_divergence_sell_signals"] = (
+        sell_signal_values
+    )
     df.loc[df.index[sell_signal_indices], "p1"] = df.index[p1_list].tolist()
     df.loc[df.index[sell_signal_indices], "p2"] = df.index[p2_list].tolist()
     df.loc[df.index[sell_signal_indices], "i1"] = df.index[i1_list].tolist()
@@ -359,30 +380,35 @@ def divergence_signals(
         return df
     return None
 
+
 def macd_divergence(df):
     return divergence_signals(df, indicator="macd")
+
 
 def rsi_divergence(df):
     return divergence_signals(df, indicator="rsi")
 
+
 def cci_divergence(df):
     return divergence_signals(df, indicator="cci")
+
 
 def stoch_divergence(df):
     return divergence_signals(df, indicator="stoch")
 
-def strategy(df: pd.DataFrame, filepath:str, signals: list[str] = ["rsi_crossover"]) -> list:
-    
+
+def bns1(
+    df: pd.DataFrame, filepath: str, signals: list[str] = ["rsi_crossover"]
+) -> list:
     symbol = os.path.splitext(os.path.basename(filepath))[0]
     logging.info(f"Mua bán mã CK {symbol} với danh sách tín hiệu {signals}")
     PnL = []
     stocks_bought = 0
     total_buy_price = 0
-    
-    df = df[(df['volume'] > 0) & (df['close'] > 0)].copy()
+
     df["buy_mark"] = np.nan
     df["sell_mark"] = np.nan
-    
+
     all_funcs = {
         "rsi_crossover": rsi_crossover,
         "macd_crossover": macd_crossover,
@@ -396,12 +422,11 @@ def strategy(df: pd.DataFrame, filepath:str, signals: list[str] = ["rsi_crossove
 
     buy_signals_columns = []
     sell_signals_columns = []
-    
+
     for signal in signals:
         all_funcs[signal](df)
         buy_signals_columns.append(df.columns.get_loc(f"{signal}_buy_signals"))
         sell_signals_columns.append(df.columns.get_loc(f"{signal}_sell_signals"))
-        
 
     for i in range(36, len(df)):
         buy_signals = {
@@ -416,7 +441,9 @@ def strategy(df: pd.DataFrame, filepath:str, signals: list[str] = ["rsi_crossove
             # logging.info(f"{buy_vote} / {sell_vote}")
             pass
         if buy_vote > 0:
-            logging.info(f"{symbol}: {i}: {df.index[i]}: Mua 1 phiếu giá {df['close'].iloc[i]}")
+            logging.info(
+                f"{symbol}: {i}: {df.index[i]}: Mua 1 phiếu giá {df['close'].iloc[i]}"
+            )
             stocks_bought += 1
             total_buy_price += df["close"].iloc[i]
             df.loc[df.index[i], "buy_mark"] = df.loc[df.index[i], "close"]
@@ -434,15 +461,126 @@ def strategy(df: pd.DataFrame, filepath:str, signals: list[str] = ["rsi_crossove
             total_buy_price = 0
             stocks_bought = 0
             df.loc[df.index[i], "sell_mark"] = df.loc[df.index[i], "close"]
-    
-    df.to_csv("strat_v4_vec.csv")
+
     return PnL
 
 
+def b1s1(
+    df: pd.DataFrame,
+    filepath: str,
+    signals: list[str] = ["rsi_crossover"],
+    vote_required=1,
+    tpsl: tuple[float, float] = None
+) -> dict:
+    symbol = os.path.splitext(os.path.basename(filepath))[0]
+    logging.info(f"Mua bán xen kẽ mã CK {symbol} với danh sách tín hiệu {signals}")
+    PnL = []
+    stocks_bought = 0
+    total_buy_price = 0
+    _return = 1.0
+
+    df["buy_mark"] = np.nan
+    df["sell_mark"] = np.nan
+
+    all_funcs = {
+        "rsi_crossover": rsi_crossover,
+        "macd_crossover": macd_crossover,
+        "cci_crossover": cci_crossover,
+        "stoch_crossover": stoch_crossover,
+        "macd_divergence": macd_divergence,
+        "rsi_divergence": rsi_divergence,
+        "cci_divergence": cci_divergence,
+        "stoch_divergence": stoch_divergence,
+    }
+
+    buy_signals_columns = []
+    sell_signals_columns = []
+
+    for signal in signals:
+        all_funcs[signal](df)
+        buy_signals_columns.append(df.columns.get_loc(f"{signal}_buy_signals"))
+        sell_signals_columns.append(df.columns.get_loc(f"{signal}_sell_signals"))
+
+    first_buy = True
+    first_buy_date = df.index[0]
+    last_sell_date = df.index[0]
+
+    for i in range(36, len(df)):
+        buy_signals = {
+            df.columns[col]: pd.notna(df.iat[i, col]) for col in buy_signals_columns
+        }
+        sell_signals = {
+            df.columns[col]: pd.notna(df.iat[i, col]) for col in sell_signals_columns
+        }
+
+        buy_vote = sum(buy_signals.values())
+        sell_vote = sum(sell_signals.values())
+        if buy_vote >= vote_required or sell_vote >= vote_required:
+            # logging.info(f"{buy_vote} / {sell_vote}")
+            pass
+        if buy_vote >= vote_required and stocks_bought == 0:
+            logging.info(
+                f"{symbol}: {i}: {df.index[i]}: Mua 1 phiếu giá {df['close'].iloc[i]}"
+            )
+            stocks_bought = 1
+            total_buy_price = df["close"].iloc[i]
+            df.loc[df.index[i], "buy_mark"] = df.loc[df.index[i], "close"]
+            if first_buy:
+                first_buy_date = df.index[i]
+                first_buy = False
+        elif sell_vote >= vote_required and stocks_bought > 0:
+            logging.info(
+                f"{symbol}: {i}: {df.index[i]}: Bán {stocks_bought} phiếu, mỗi phiếu giá {df['close'].iloc[i]}"
+            )
+            sell_price = df["close"].iloc[i] * stocks_bought
+            # if total_buy_price == 0:
+            #     print(f"Divide by zero in file {filepath}")
+            PnL.append((sell_price - total_buy_price) * 100 / total_buy_price)
+            logging.info(
+                f"{symbol}: {i}: PnL = {((sell_price - total_buy_price) * 100 / total_buy_price):.2f}%"
+            )
+            _return *= sell_price / total_buy_price
+            total_buy_price = 0
+            stocks_bought = 0
+            df.loc[df.index[i], "sell_mark"] = df.loc[df.index[i], "close"]
+            last_sell_date = df.index[i]
+        elif tpsl is not None and stocks_bought > 0 and \
+            ((df["close"].iloc[i]-total_buy_price)/total_buy_price >= tpsl[0] or\
+            (df["close"].iloc[i]-total_buy_price)/total_buy_price <= -tpsl[1]):
+            logging.info(
+                f"{symbol}: {i}: {df.index[i]}: Bán {stocks_bought} phiếu, mỗi phiếu giá {df['close'].iloc[i]}, lí do: TPSL"
+            )
+            sell_price = df["close"].iloc[i] * stocks_bought
+            PnL.append((sell_price - total_buy_price) * 100 / total_buy_price)
+            logging.info(
+                f"{symbol}: {i}: PnL = {((sell_price - total_buy_price) * 100 / total_buy_price):.2f}%"
+            )
+            _return *= sell_price / total_buy_price
+            total_buy_price = 0
+            stocks_bought = 0
+            df.loc[df.index[i], "sell_mark"] = df.loc[df.index[i], "close"]
+            last_sell_date = df.index[i]
+    return {
+        "PnL": PnL,
+        "return": _return,
+        "return_per_trade": _return ** (1 / len(PnL)) if len(PnL) > 0 else 0,
+        "first_buy_date": first_buy_date,
+        "last_sell_date": last_sell_date,
+    }
+
+
 if __name__ == "__main__":
-    filepath = "stock_data/AAA.csv"
+    filepath = "stock_data/VNM.csv"
     sample_df = pd.read_csv(filepath, index_col="time")
+    sample_df = sample_df[(sample_df["volume"] > 0) & (sample_df["close"] > 0)].copy()
+    results = b1s1(sample_df, filepath, ["macd_divergence"], 1, (0.5, 0.25))
+    result_reader.read_PnL_results(results["PnL"])
+    print(f"{'Cumulative return:':<15}{(results['return']-1) * 100:.2f}%")
+    print(f"Return per trade: {results['return_per_trade']:.2f}")
+    print(f"{results['first_buy_date']}, {results['last_sell_date']}")
 
-    results = strategy(df=sample_df, signals=["macd_divergence"], filepath=filepath) 
-
-    result_reader.read_PnL_results(results)
+    results = b1s1(sample_df, filepath, ["macd_crossover"], 1)
+    result_reader.read_PnL_results(results["PnL"])
+    print(f"{'Cumulative return:':<15}{(results['return']-1) * 100:.2f}%")
+    print(f"Return per trade: {results['return_per_trade']:.2f}")
+    print(f"{results['first_buy_date']}, {results['last_sell_date']}")

@@ -54,6 +54,9 @@ def save_data(results, folder):
         file_path = os.path.join(folder, f"{symbol}.csv")
         df.to_csv(file_path, index=False)
 
+def clean_data():
+    pass
+
 if __name__ == "__main__":
     total_symbols = len(symbols)
     all_data = {}

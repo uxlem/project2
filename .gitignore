@@ -1,4 +1,5 @@
 #
+*.csv
 stock_data/
 stock_data_VN30/
 stock_data_VN100/
